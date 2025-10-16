@@ -1,0 +1,10 @@
+function greet(name) {
+    let greeting = "Hello, " + name + "!";
+    console.log(greeting);
+}
+
+console.log(123,123);
+console.log(0x102FAB3)
+
+// Call the function
+greet('World');

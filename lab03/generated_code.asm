@@ -1,0 +1,39 @@
+--- Generated Stack Machine Code ---
+PUSH 10
+STORE x
+PUSH 20
+STORE y
+LOAD x
+LOAD y
+LT
+JUMP_IF_FALSE L0
+LOAD y
+LOAD x
+PUSH 2
+MUL
+SUB
+STORE z
+JUMP L1
+L0:
+PUSH 0
+STORE z
+L1:
+LOAD z
+PRINT
+PUSH 5
+STORE a
+L2:
+LOAD a
+PUSH 0
+GT
+JUMP_IF_FALSE L3
+LOAD a
+PRINT
+LOAD a
+PUSH 1
+SUB
+STORE a
+JUMP L2
+L3:
+HALT
+------------------------------------

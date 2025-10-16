@@ -1,0 +1,889 @@
+\documentclass[12pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[ukrainian]{babel}
+\usepackage{geometry}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{amsmath}
+\usepackage{fancyhdr}
+
+\geometry{left=2.5cm,right=1.5cm,top=2cm,bottom=2cm}
+
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.95,0.95,0.92}
+
+\lstdefinestyle{mystyle}{
+    backgroundcolor=\color{backcolour},   
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{magenta},
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\footnotesize,
+    breakatwhitespace=false,         
+    breaklines=true,                 
+    captionpos=b,                    
+    keepspaces=true,                 
+    numbers=left,                    
+    numbersep=5pt,                  
+    showspaces=false,                
+    showstringspaces=false,
+    showtabs=false,                  
+    tabsize=2
+}
+
+\lstset{style=mystyle}
+
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{Лабораторна робота №3}
+\lhead{Системне програмування}
+\rfoot{\thepage}
+
+\begin{document}
+
+\begin{titlepage}
+    \centering
+    
+    \textsc{Лабораторна робота №3}
+    
+    \vspace{\stretch{1}}
+    
+    {\Large\bfseries lex/yacc-based parser\\}
+    \rule{3in}{0.4pt}
+    
+    \vspace{\stretch{1}}
+    
+    Петров Богдан\\
+    Київський національний університет імені Тараса Шевченка\\
+    Факультет комп'ютерних наук і кібернетики\\
+    Група МІ31\\
+    
+    \vspace{\stretch{1}}
+    
+    {\small
+    Київ\\
+    16.10.2025}
+    
+    \vspace*{\stretch{1}}
+    
+    \end{titlepage}
+    
+    \newpage
+    
+    \tableofcontents
+    
+    \newpage
+
+\section{Мета роботи}
+
+Метою даної лабораторної роботи є розробка синтаксичного аналізатора для спрощеної імперативної мови програмування на базі інструментів Lex/YACC (Flex/Bison) з можливістю:
+
+\begin{itemize}
+    \item Лексичного аналізу вхідного коду
+    \item Синтаксичного аналізу та побудови абстрактного синтаксичного дерева (AST)
+    \item Візуалізації AST у форматі GraphViz
+    \item Генерації коду для стекової машини
+\end{itemize}
+
+\section{Теоретичні відомості}
+
+\subsection{Що таке компілятор}
+
+\textbf{Компілятор} --- це програма, яка перетворює вихідний код, написаний на одній мові програмування (мова-джерело), у код іншої мови (цільова мова). Типовий компілятор складається з декількох фаз:
+
+\begin{enumerate}
+    \item \textbf{Лексичний аналіз} --- розбиття вхідного тексту на токени (лексеми)
+    \item \textbf{Синтаксичний аналіз} --- перевірка правильності послідовності токенів та побудова синтаксичного дерева
+    \item \textbf{Семантичний аналіз} --- перевірка семантичної коректності (типи, область видимості тощо)
+    \item \textbf{Оптимізація} --- покращення проміжного коду
+    \item \textbf{Генерація коду} --- створення цільового коду
+\end{enumerate}
+
+\subsection{Flex --- генератор лексичних аналізаторів}
+
+\textbf{Flex} (Fast Lexical Analyzer Generator) --- це інструмент для автоматичної генерації лексичних аналізаторів (сканерів). Це вдосконалена версія класичного Unix-інструменту \texttt{lex}.
+
+\subsubsection{Принцип роботи Flex}
+
+Flex працює на основі регулярних виразів:
+
+\begin{enumerate}
+    \item Програміст описує \textbf{шаблони токенів} за допомогою регулярних виразів
+    \item Для кожного шаблону вказується \textbf{дія} (C-код), яка виконується при розпізнаванні токена
+    \item Flex генерує C-код функції \texttt{yylex()}, яка виконує лексичний аналіз
+    \item Згенерований аналізатор використовує кінцевий автомат для ефективного розпізнавання токенів
+\end{enumerate}
+
+\subsubsection{Структура .l файлу}
+
+Файл специфікації Flex має наступну структуру:
+
+\begin{lstlisting}[language=C]
+%{
+    /* C code (definitions, includes, etc.) */
+    #include <string.h>
+    #include "parser.tab.h"
+    
+    void yyerror(const char* s);
+%}
+
+/* Options and definitions */
+%option yylineno
+
+%%
+/* Rules: pattern { action } */
+"int"           { return T_INT; }
+"if"            { return T_IF; }
+
+[a-zA-Z_][a-zA-Z0-9_]* {
+    yylval.str_val = strdup(yytext);
+    return T_IDENTIFIER;
+}
+
+[0-9]+ {
+    yylval.int_val = atoi(yytext);
+    return T_NUMBER;
+}
+%%
+
+/* Additional C code */
+int yywrap(void) {
+    return 1;
+}
+\end{lstlisting}
+
+\subsection{Bison --- генератор синтаксичних аналізаторів}
+
+\textbf{Bison} --- це генератор синтаксичних аналізаторів, сумісний з YACC (Yet Another Compiler Compiler). Він створює LALR(1) парсери.
+
+\subsubsection{LALR-аналіз}
+
+\textbf{LALR} (Look-Ahead LR) --- це тип синтаксичного аналізу знизу-вгору:
+
+\begin{itemize}
+    \item \textbf{LR} означає "Left-to-right scan, Rightmost derivation"
+    \item \textbf{Look-Ahead} --- парсер може "заглянути" на один токен вперед
+    \item LALR --- це компроміс між простим LR(0) та потужним LR(1)
+    \item Використовує стек для зберігання станів та символів
+    \item Виконує дві основні операції: \texttt{shift} (зсув) та \texttt{reduce} (згортка)
+\end{itemize}
+
+\subsubsection{Структура .y файлу}
+
+\begin{lstlisting}[language=C]
+%{
+    /* C code prologue */
+    #include <stdio.h>
+    #include <stdlib.h>
+    #include "ast.h"
+    
+    extern int yylex();
+    extern int yylineno;
+    void yyerror(const char* s);
+    
+    Node *ast_root = NULL;
+%}
+
+%union { /* Semantic value types */ 
+    int int_val;
+    char* str_val;
+    struct Node* node;
+}
+
+%token <int_val> T_NUMBER
+%token <str_val> T_IDENTIFIER
+%token T_INT T_IF T_ELSE T_WHILE
+
+%type <node> program statements statement expr
+
+/* Operator associativity and precedence */
+%left '+' '-'
+%left '*' '/'
+
+%%
+/* Grammar rules */
+program:
+    statements { ast_root = create_node(NODE_PROGRAM, 
+                                        $1, NULL, NULL); }
+    ;
+
+statement:
+    T_INT T_IDENTIFIER ';' { 
+        $$ = create_node(NODE_INT_DECLARATION, 
+                        create_identifier_node($2), 
+                        NULL, NULL); 
+    }
+    | T_IDENTIFIER '=' expr ';' { 
+        $$ = create_node(NODE_ASSIGN, 
+                        create_identifier_node($1), 
+                        $2, NULL); 
+    }
+    ;
+%%
+
+/* C code epilogue */
+void yyerror(const char* s) {
+    fprintf(stderr, "Parse Error: %s\n", s);
+    exit(EXIT_FAILURE);
+}
+\end{lstlisting}
+
+\subsection{Абстрактне синтаксичне дерево (AST)}
+
+\textbf{AST} --- це деревоподібне представлення абстрактної синтаксичної структури вихідного коду. На відміну від дерева розбору (parse tree), AST не містить всіх деталей синтаксису (таких як дужки, крапки з комою).
+
+\textbf{Переваги AST:}
+\begin{itemize}
+    \item Компактне представлення програми
+    \item Зручне для трансформацій та оптимізацій
+    \item Легко обходити для генерації коду
+    \item Не залежить від конкретного синтаксису
+\end{itemize}
+
+\section{Опис реалізації}
+
+\subsection{Архітектура компілятора}
+
+Наш міні-компілятор складається з наступних модулів:
+
+\begin{table}[h]
+\centering
+\begin{tabular}{|l|l|}
+\hline
+\textbf{Файл} & \textbf{Призначення} \\ \hline
+scanner.l & Специфікація лексичного аналізатора (Flex) \\ \hline
+parser.y & Специфікація синтаксичного аналізатора (Bison) \\ \hline
+ast.h/ast.c & Визначення та функції для роботи з AST \\ \hline
+visualize.h/visualize.c & Візуалізація AST в GraphViz \\ \hline
+codegen.h/codegen.c & Генерація коду стекової машини \\ \hline
+main.c & Головна програма \\ \hline
+makefile & Конфігурація збірки \\ \hline
+\end{tabular}
+\caption{Структура проекту}
+\end{table}
+
+\subsection{Лексичний аналізатор (scanner.l)}
+
+\subsubsection{Ключові слова та токени}
+
+Наш аналізатор розпізнає наступні категорії токенів:
+
+\begin{lstlisting}[language=C]
+"int"       { return T_INT; }
+"if"        { return T_IF; }
+"else"      { return T_ELSE; }
+"while"     { return T_WHILE; }
+"return"    { return T_RETURN; }
+"print"     { return T_PRINT; }
+\end{lstlisting}
+
+\textbf{Пояснення:} Коли сканер зустрічає рядок ``int'', він повертає токен \texttt{T\_INT} парсеру. Це термінальні символи граматики.
+
+\subsubsection{Ідентифікатори та числа}
+
+\begin{lstlisting}[language=C]
+[a-zA-Z_][a-zA-Z0-9_]* {
+    yylval.str_val = strdup(yytext);
+    return T_IDENTIFIER;
+}
+
+[0-9]+ {
+    yylval.int_val = atoi(yytext);
+    return T_NUMBER;
+}
+\end{lstlisting}
+
+\textbf{Регулярний вираз} \texttt{[a-zA-Z\_][a-zA-Z0-9\_]*} означає:
+\begin{itemize}
+    \item Перший символ --- літера або підкреслення
+    \item Наступні символи --- літери, цифри або підкреслення
+\end{itemize}
+
+\texttt{yylval} --- це глобальна змінна для передачі семантичного значення токена парсеру.
+
+\subsubsection{Коментарі}
+
+\begin{lstlisting}[language=C]
+"/*"([^*]|"*"+[^*/])*"*"+"/"  ; 
+"//".* ; 
+\end{lstlisting}
+
+Перший регулярний вираз розпізнає багаторядкові коментарі \texttt{/* ... */}, другий --- однорядкові \texttt{// ...}. Порожня дія (``\texttt{;}'') означає, що коментарі ігноруються.
+
+\subsubsection{Опція yylineno}
+
+\begin{lstlisting}[language=C]
+%option yylineno
+\end{lstlisting}
+
+Ця опція автоматично підтримує змінну \texttt{yylineno}, яка містить номер поточного рядка. Корисно для повідомлень про помилки.
+
+\subsection{Синтаксичний аналізатор (parser.y)}
+
+\subsubsection{Union --- типи семантичних значень}
+
+\begin{lstlisting}[language=C]
+%union {
+    int int_val;
+    char* str_val;
+    struct Node* node;
+}
+\end{lstlisting}
+
+Визначає, які типи даних можуть зберігатися як семантичні значення токенів та нетерміналів:
+\begin{itemize}
+    \item \texttt{int\_val} --- для числових констант
+    \item \texttt{str\_val} --- для ідентифікаторів
+    \item \texttt{node} --- для вузлів AST
+\end{itemize}
+
+\subsubsection{Граматичні правила}
+
+\textbf{Приклад: оголошення змінної}
+
+\begin{lstlisting}[language=C]
+declaration:
+    T_INT T_IDENTIFIER { 
+        $$ = create_node(NODE_INT_DECLARATION, 
+                         create_identifier_node($2), 
+                         NULL, NULL); 
+        free($2); 
+    }
+    ;
+\end{lstlisting}
+
+\textbf{Пояснення:}
+\begin{itemize}
+    \item \texttt{\$\$} --- результат правила (повертається нагору)
+    \item \texttt{\$2} --- значення другого символу (\texttt{T\_IDENTIFIER})
+    \item Створюється вузол AST типу \texttt{NODE\_INT\_DECLARATION}
+    \item \texttt{free(\$2)} --- звільнення пам'яті, яку виділив \texttt{strdup}
+\end{itemize}
+
+\textbf{Приклад: вираз присвоєння}
+
+\begin{lstlisting}[language=C]
+assignment_expr:
+    T_IDENTIFIER '=' expr { 
+        $$ = create_node(NODE_ASSIGN, 
+                         create_identifier_node($1), 
+                         $3, NULL); 
+        free($1); 
+    }
+    ;
+\end{lstlisting}
+
+Створює вузол присвоєння з двома дочірніми вузлами:
+\begin{itemize}
+    \item \texttt{op1} --- ідентифікатор змінної
+    \item \texttt{op2} --- вираз (результат обчислення)
+\end{itemize}
+
+\subsubsection{Пріоритет та асоціативність операторів}
+
+\begin{lstlisting}[language=C]
+%left T_OR
+%left T_AND
+%left T_EQ T_NEQ
+%left '<' '>' T_LE T_GE
+%left '+' '-'
+%left '*' '/'
+%right '!' 
+\end{lstlisting}
+
+Визначає порядок та асоціативність:
+\begin{itemize}
+    \item \texttt{\%left} --- лівоасоціативні оператори
+    \item \texttt{\%right} --- правоасоціативні
+    \item Чим нижче в списку, тим вищий пріоритет
+\end{itemize}
+
+Наприклад, \texttt{2 + 3 * 4} парситься як \texttt{2 + (3 * 4)}, бо \texttt{*} має вищий пріоритет.
+
+\subsubsection{Shift/Reduce конфлікт}
+
+Наш парсер має один shift/reduce конфлікт --- \textbf{проблема висячого else}:
+
+\begin{lstlisting}[language=C]
+if (x > 0) if (y > 0) z = 1; else z = 2;
+\end{lstlisting}
+
+До якого \texttt{if} відноситься \texttt{else}? Bison за замовчуванням виконує \texttt{shift}, що означає, що \texttt{else} асоціюється з найближчим \texttt{if} (коректна поведінка).
+
+\subsection{Абстрактне синтаксичне дерево (ast.h/ast.c)}
+
+\subsubsection{Структура вузла}
+
+\begin{lstlisting}[language=C]
+typedef struct Node {
+    NodeType type;           // Node type
+    struct Node *op1, *op2, *op3;  // Child nodes
+    struct Node *next;       // Next node (for lists)
+    union {
+        int int_val;         // For constants and operators
+        char* str_val;       // For identifiers
+    } data;
+} Node;
+\end{lstlisting}
+
+\textbf{Ключові особливості:}
+
+\begin{itemize}
+    \item \textbf{Union в data} --- економить пам'ять. Оскільки вузол або містить число, або рядок (але не обидва одночасно), union дозволяє використовувати одну й ту саму область пам'яті для обох типів.
+    
+    \item \textbf{Три операнди (op1, op2, op3)} --- підтримують як унарні (1 операнд), бінарні (2 операнди), так і тернарні вирази (3 операнди). Наприклад, \texttt{if-else} використовує всі три: умова, then-гілка, else-гілка.
+    
+    \item \textbf{Поле next} --- для зв'язування послідовності інструкцій у односпрямований список. Це дозволяє зберігати кілька statement'ів без додаткових масивів.
+\end{itemize}
+
+\subsubsection{Приклад AST для коду}
+
+Для коду:
+\begin{lstlisting}[language=C]
+int x;
+x = 5 + 3;
+\end{lstlisting}
+
+Створюється наступне дерево:
+
+\begin{verbatim}
+    PROGRAM
+       |
+   INT_DECL (x) --> ASSIGN
+                      |    |
+                     (x)  BINARY_OP (+)
+                           |        |
+                          (5)      (3)
+\end{verbatim}
+
+\subsection{Візуалізація AST (visualize.c)}
+
+\subsubsection{Формат GraphViz DOT}
+
+GraphViz --- це інструмент для візуалізації графів. Формат DOT дозволяє описувати графи текстово:
+
+\begin{lstlisting}[language=C]
+digraph AST {
+    node [shape=box];
+    node0 [label="Program"];
+    node0 -> node1;
+    node1 [label="int decl"];
+    ...
+}
+\end{lstlisting}
+
+\subsubsection{Рекурсивний обхід}
+
+\begin{lstlisting}[language=C]
+static void ast_to_dot_recursive(Node* node, FILE* f) {
+    if (!node) return;
+    int current_id = node_counter++;
+    fprintf(f, "  node%d [label=\"%s\"];\n", 
+            current_id, get_node_label(node));
+
+    if (node->op1) {
+        fprintf(f, "  node%d -> node%d;\n", 
+                current_id, node_counter);
+        ast_to_dot_recursive(node->op1, f);
+    }
+    // Similarly for op2, op3, next
+}
+\end{lstlisting}
+
+Функція виконує обхід дерева в глибину (DFS), генеруючи для кожного вузла:
+\begin{enumerate}
+    \item Опис вузла з унікальним ID та міткою
+    \item Ребра до дочірніх вузлів
+\end{enumerate}
+
+\subsection{Генерація коду (codegen.c)}
+
+\subsubsection{Стекова машина}
+
+Наш компілятор генерує код для \textbf{стекової машини} --- абстрактної обчислювальної моделі, яка використовує стек для виконання операцій.
+
+\textbf{Основні інструкції:}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{|l|l|}
+\hline
+\textbf{Інструкція} & \textbf{Опис} \\ \hline
+\texttt{PUSH n} & Покласти число n на стек \\ \hline
+\texttt{LOAD var} & Завантажити значення змінної на стек \\ \hline
+\texttt{STORE var} & Зберегти вершину стека в змінну \\ \hline
+\texttt{ADD} & Додати два верхні елементи стека \\ \hline
+\texttt{SUB} & Відняти \\ \hline
+\texttt{MUL} & Помножити \\ \hline
+\texttt{DIV} & Поділити \\ \hline
+\texttt{LT, GT, EQ} & Операції порівняння \\ \hline
+\texttt{JUMP L} & Безумовний перехід \\ \hline
+\texttt{JUMP\_IF\_FALSE L} & Умовний перехід \\ \hline
+\texttt{PRINT} & Вивести вершину стека \\ \hline
+\texttt{HALT} & Завершити виконання \\ \hline
+\end{tabular}
+\caption{Інструкції стекової машини}
+\end{table}
+
+\subsubsection{Приклад генерації коду}
+
+\textbf{Вихідний код:}
+\begin{lstlisting}[language=C]
+int x;
+x = 5 + 3;
+print(x);
+\end{lstlisting}
+
+\textbf{Згенерований код:}
+\begin{verbatim}
+PUSH 5
+PUSH 3
+ADD
+STORE x
+LOAD x
+PRINT
+HALT
+\end{verbatim}
+
+\textbf{Покрокове виконання:}
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{|l|l|l|}
+\hline
+\textbf{Інструкція} & \textbf{Стек} & \textbf{Змінні} \\ \hline
+\texttt{PUSH 5} & [5] & - \\ \hline
+\texttt{PUSH 3} & [5, 3] & - \\ \hline
+\texttt{ADD} & [8] & - \\ \hline
+\texttt{STORE x} & [] & x=8 \\ \hline
+\texttt{LOAD x} & [8] & x=8 \\ \hline
+\texttt{PRINT} & [] & x=8 (виведено: 8) \\ \hline
+\end{tabular}
+\caption{Виконання на стековій машині}
+\end{table}
+
+\subsubsection{Генерація коду for if-else}
+
+\begin{lstlisting}[language=C]
+case NODE_IF_ELSE:
+    label1 = label_counter++;  // For else branch
+    label2 = label_counter++;  // For end
+    codegen_recursive(node->op1);  // Condition
+    printf("JUMP_IF_FALSE L%d\n", label1);
+    codegen_recursive(node->op2);  // Then branch
+    printf("JUMP L%d\n", label2);
+    printf("L%d:\n", label1);
+    codegen_recursive(node->op3);  // Else branch
+    printf("L%d:\n", label2);
+    break;
+\end{lstlisting}
+
+\textbf{Для коду:}
+\begin{lstlisting}[language=C]
+if (x < 5) 
+    y = 1; 
+else 
+    y = 2;
+\end{lstlisting}
+
+\textbf{Генерується:}
+\begin{verbatim}
+LOAD x
+PUSH 5
+LT
+JUMP_IF_FALSE L0    # Якщо false, перейти до else
+PUSH 1
+STORE y
+JUMP L1             # Пропустити else
+L0:
+PUSH 2
+STORE y
+L1:
+\end{verbatim}
+
+\subsubsection{Генерація коду для циклів}
+
+\begin{lstlisting}[language=C]
+case NODE_WHILE:
+    label1 = label_counter++;  // Loop start
+    label2 = label_counter++;  // Loop end
+    printf("L%d:\n", label1);
+    codegen_recursive(node->op1);  // Condition
+    printf("JUMP_IF_FALSE L%d\n", label2);
+    codegen_recursive(node->op2);  // Loop body
+    printf("JUMP L%d\n", label1);  // Jump back
+    printf("L%d:\n", label2);
+    break;
+\end{lstlisting}
+
+\subsection{Makefile --- автоматизація збірки}
+
+\subsubsection{Змінні}
+
+\begin{lstlisting}[language=make]
+CC = gcc
+CFLAGS = -g -Wall -Wno-unused-function
+FLEX = flex
+BISON = bison
+BISON_FLAGS = -d -v
+\end{lstlisting}
+
+\begin{itemize}
+    \item \texttt{-g} --- включити відладочну інформацію
+    \item \texttt{-Wall} --- всі попередження
+    \item \texttt{-d} (bison) --- генерувати .h файл
+    \item \texttt{-v} (bison) --- створити .output з деталями граматики
+\end{itemize}
+
+\subsubsection{Правила залежностей}
+
+\begin{lstlisting}[language=make]
+parser.tab.c parser.tab.h: parser.y ast.h
+	$(BISON) $(BISON_FLAGS) parser.y
+
+lex.yy.c: scanner.l parser.tab.h
+	$(FLEX) -o lex.yy.c scanner.l
+
+main.o: main.c parser.tab.h
+	$(CC) $(CFLAGS) -c main.c -o main.o
+\end{lstlisting}
+
+\textbf{Пояснення залежностей:}
+
+\begin{enumerate}
+    \item \texttt{parser.tab.h} залежить від \texttt{parser.y} --- спочатку треба згенерувати парсер
+    \item \texttt{lex.yy.c} залежить від \texttt{parser.tab.h} --- сканер використовує токени, визначені в парсері
+    \item \texttt{main.o} залежить від \texttt{parser.tab.h} --- main.c include'ить цей заголовок
+\end{enumerate}
+
+Ця послідовність гарантує правильний порядок збірки.
+
+\subsubsection{Фонові цілі}
+
+\begin{lstlisting}[language=make]
+run: all
+	./$(EXECUTABLE) input.c
+
+clean:
+	rm -f $(EXECUTABLE) $(OBJECTS) lex.yy.c \
+	      parser.tab.c parser.tab.h parser.output \
+	      *.dot *.png
+\end{lstlisting}
+
+\begin{itemize}
+    \item \texttt{make run} --- збирає проект та запускає на input.c
+    \item \texttt{make clean} --- видаляє всі згенеровані файли
+\end{itemize}
+
+\section{Підтримувані конструкції мови}
+
+\subsection{Оголошення змінних}
+
+\begin{lstlisting}[language=C]
+int x;
+int y;
+int result;
+\end{lstlisting}
+
+\subsection{Присвоєння}
+
+\begin{lstlisting}[language=C]
+x = 10;
+y = x + 5;
+result = (x + y) * 2;
+\end{lstlisting}
+
+\subsection{Умовні оператори}
+
+\begin{lstlisting}[language=C]
+if (x > 0) {
+    print(x);
+}
+
+if (x < y) {
+    result = x;
+} else {
+    result = y;
+}
+\end{lstlisting}
+
+\subsection{Цикли}
+
+\begin{lstlisting}[language=C]
+while (x > 0) {
+    print(x);
+    x = x - 1;
+}
+\end{lstlisting}
+
+\subsection{Вирази}
+
+\begin{itemize}
+    \item Арифметичні: \texttt{+}, \texttt{-}, \texttt{*}, \texttt{/}
+    \item Порівняння: \texttt{<}, \texttt{>}, \texttt{<=}, \texttt{>=}, \texttt{==}, \texttt{!=}
+    \item Логічні: \texttt{\&\&}, \texttt{||}
+    \item Дужки: \texttt{(expr)}
+\end{itemize}
+
+\section{Приклад роботи}
+
+\subsection{Вхідний файл (input.c)}
+
+\begin{lstlisting}[language=C]
+/* Example code for the mini-compiler */
+int x;
+int y;
+int z;
+
+x = 10;
+y = 20;
+
+if (x < y) {
+    z = y - x * 2;
+} else {
+    z = 0;
+}
+
+print(z);
+
+int a;
+a = 5;
+while (a > 0) {
+    print(a);
+    a = a - 1;
+}
+\end{lstlisting}
+
+\subsection{Згенерований код}
+
+\begin{verbatim}
+--- Generated Stack Machine Code ---
+PUSH 10
+STORE x
+PUSH 20
+STORE y
+LOAD x
+LOAD y
+LT
+JUMP_IF_FALSE L0
+LOAD y
+LOAD x
+PUSH 2
+MUL
+SUB
+STORE z
+JUMP L1
+L0:
+PUSH 0
+STORE z
+L1:
+LOAD z
+PRINT
+PUSH 5
+STORE a
+L2:
+LOAD a
+PUSH 0
+GT
+JUMP_IF_FALSE L3
+LOAD a
+PRINT
+LOAD a
+PUSH 1
+SUB
+STORE a
+JUMP L2
+L3:
+HALT
+------------------------------------
+\end{verbatim}
+
+\subsection{Візуалізація AST}
+
+AST для цього коду зберігається у файлі \texttt{ast.png}. Він показує ієрархічну структуру програми, де кожен вузол представляє синтаксичну конструкцію, а ребра --- відношення між ними.
+
+\section{Можливі розширення}
+
+Для отримання додаткових балів можна реалізувати:
+
+\subsection{Граматика мови C/C++}
+\begin{itemize}
+    \item Функції з параметрами
+    \item Масиви
+    \item Вказівники
+    \item Структури
+    \item Додаткові типи даних (float, char, bool)
+\end{itemize}
+
+\subsection{Семантичний аналіз}
+\begin{itemize}
+    \item Таблиця символів для відстеження змінних
+    \item Перевірка типів
+    \item Контроль області видимості
+    \item Виявлення неініціалізованих змінних
+\end{itemize}
+
+\subsection{Генерація коду на цільовій мові}
+\begin{itemize}
+    \item x86/x64 assembly
+    \item LLVM IR
+    \item Java bytecode
+    \item JavaScript для виконання в браузері
+\end{itemize}
+
+\subsection{Теоретичні питання}
+
+Для відповіді на питання про LALR-аналізатор:
+
+\textbf{Принципи роботи YACC:}
+\begin{enumerate}
+    \item YACC читає специфікацію граматики (.y файл)
+    \item Будує таблицю станів LALR-автомата
+    \item Генерує C-код парсера на основі таблиці
+    \item Парсер використовує стек для зберігання станів
+    \item Виконує shift/reduce операції згідно з таблицею
+\end{enumerate}
+
+\textbf{Конфлікти shift-reduce:}
+\begin{itemize}
+    \item Виникають, коли неясно: зсунути наступний символ чи згорнути
+    \item Приклад: висяче else
+    \item Розв'язується пріоритетами або рефакторингом граматики
+\end{itemize}
+
+\textbf{Конфлікти reduce-reduce:}
+\begin{itemize}
+    \item Виникають, коли є два різні правила для згортки
+    \item Означають неоднозначність граматики
+    \item Вимагають переписування граматики
+\end{itemize}
+
+\section{Висновки}
+
+В ході виконання лабораторної роботи було:
+
+\begin{enumerate}
+    \item \textbf{Вивчено інструменти Flex та Bison} для автоматичної генерації компіляторів
+    
+    \item \textbf{Розроблено лексичний аналізатор}, який розпізнає токени спрощеної імперативної мови
+    
+    \item \textbf{Створено синтаксичний аналізатор} на основі LALR-граматики з побудовою AST
+    
+    \item \textbf{Реалізовано візуалізацію AST} у форматі GraphViz для наочного представлення структури програми
+    
+    \item \textbf{Імплементовано генератор коду} для стекової машини, що перетворює AST у виконуваний код
+    
+    \item \textbf{Налаштовано систему збірки} за допомогою Makefile з правильними залежностями
+\end{enumerate}
+
+Отриманий компілятор здатен обробляти базові конструкції імперативної мови: змінні, присвоєння, умови, цикли, арифметичні та логічні вирази. Це демонструє основні принципи роботи компіляторів та дає фундамент для подальшого розширення функціональності.
+
+Проект може бути розширений додаванням семантичного аналізу, підтримки функцій, масивів, а також генерації коду для реальних цільових платформ.
+
+\end{document}
+
